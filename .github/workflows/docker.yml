@@ -54,50 +54,49 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements.txt onvif-zeep
 
-      - name: Validate Quadlet unit
+      - name: Validate Quadlet units and installer
         run: |
           QUADLET_UNIT_DIRS=$PWD/podman /usr/libexec/podman/quadlet -dryrun
           QUADLET_UNIT_DIRS=$PWD/podman /usr/libexec/podman/quadlet -dryrun -user
+          shellcheck -S warning podman/install.sh
 
       - name: Build image with podman (rootful, like a system Quadlet)
         run: sudo podman build -t localhost/dahua-onvif:ci .
 
-      - name: Run container with Quadlet flags on port 80 against mock VTO
+      - name: Install with podman/install.sh under systemd (as on a real host)
         run: |
-          python test/mock_dahua.py > mock.log 2>&1 &
+          nohup python test/mock_dahua.py > mock.log 2>&1 &
           sleep 1
-          sed 's/port: 8000/port: 80/' test/test_config.yaml > /tmp/config-80.yaml
-          grep -q 'port: 80}' /tmp/config-80.yaml || grep -q 'port: 80,' /tmp/config-80.yaml
-          printf '%s' 'p@ss w' | sudo podman secret create dahua-password -
-          sudo podman run -d --name dahua-onvif --network=host \
-            --security-opt=no-new-privileges --cap-drop=all --cap-add=NET_BIND_SERVICE --read-only \
-            -v /tmp/config-80.yaml:/config/config.yaml:ro,Z \
-            --secret dahua-password,type=env,target=DAHUA_PASSWORD \
-            localhost/dahua-onvif:ci
-          sleep 5
-          curl -sf http://127.0.0.1/ | grep -q "ONVIF device service"
-          cd test && ONVIF_PORT=80 timeout 90 python test_client.py
+          sudo ./podman/install.sh --vto 127.0.0.1 --vto-port 8080 \
+            --password 'p@ss w' --image localhost/dahua-onvif:ci
 
-      - name: Run go2rtc with the Quadlet flags and shipped config
+      - name: Check the services
         run: |
-          sudo mkdir -p /etc/dahua-onvif
-          sudo cp podman/go2rtc.yaml /etc/dahua-onvif/go2rtc.yaml
-          sudo podman run -d --name go2rtc --network=host --security-opt=no-new-privileges \
-            -v /etc/dahua-onvif/go2rtc.yaml:/config/go2rtc.yaml:ro,Z \
-            --secret dahua-password,type=env,target=DAHUA_PASSWORD \
-            docker.io/alexxit/go2rtc:latest
+          systemctl is-active dahua-onvif go2rtc
+          systemctl cat dahua-onvif | grep -- '--user 0'
+          systemctl cat dahua-onvif | grep -- '--cap-add=net_bind_service'
+          sleep 3
+          curl -sf http://127.0.0.1/ | tee index.html | grep -q "ONVIF device service"
+          grep -q "stream.html?src=voordeur" index.html
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:1984/api/streams > streams.json && break; sleep 1; done
           cat streams.json
           grep -q '"voordeur"' streams.json
           grep -q '"voordeur_sub"' streams.json
           curl -sf "http://127.0.0.1:1984/stream.html?src=voordeur&mode=webrtc,mse" | grep -qi "video-stream"
+          cd test && ONVIF_PORT=80 timeout 90 python test_client.py
+
+      - name: Re-run installer keeps config and restarts cleanly
+        run: |
+          sudo ./podman/install.sh --image localhost/dahua-onvif:ci | tee reinstall.log
+          grep -q "keeping existing /etc/dahua-onvif/config.yaml" reinstall.log
+          systemctl is-active dahua-onvif go2rtc
 
       - name: Show logs on failure
         if: failure()
         run: |
           echo "--- mock"; cat mock.log || true
-          echo "--- container"; sudo podman logs dahua-onvif || true
-          echo "--- go2rtc"; sudo podman logs go2rtc || true
+          echo "--- config"; sudo cat /etc/dahua-onvif/config.yaml /etc/dahua-onvif/go2rtc.yaml || true
+          sudo journalctl -u dahua-onvif -u go2rtc --no-pager -n 200 || true
 
   build:
     needs: [test, podman]

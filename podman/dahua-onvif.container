@@ -27,8 +27,11 @@ Secret=dahua-password,type=env,target=DAHUA_PASSWORD
 # Pull new images with `podman auto-update` / podman-auto-update.timer
 AutoUpdate=registry
 NoNewPrivileges=true
+# Port 80 needs NET_BIND_SERVICE. Run as container root so the capability is
+# effective on every host (non-root users only get it via ambient caps, which
+# some hosts - e.g. LXC - don't pass through). Everything else stays dropped.
+User=0
 DropCapability=ALL
-# Allows binding onvif.port 80 (any port below 1024)
 AddCapability=NET_BIND_SERVICE
 ReadOnly=true
 

@@ -47,59 +47,46 @@ docker run -d --name dahua-onvif --network host --restart unless-stopped \
 
 Without Docker: `pip install -r requirements.txt && python dahua_onvif.py config.yaml`
 
-## Podman + systemd (Quadlet)
+## Podman + systemd (Quadlet) - quick install
 
-[`podman/dahua-onvif.container`](podman/dahua-onvif.container) is a Quadlet unit: systemd runs the container directly, restarts it on failure, starts it at boot, and `podman auto-update` keeps the image current. Needs Podman 4.4 or newer.
-
-**Rootful** (system service):
+One command on the podman host (as root) sets up both services: the ONVIF bridge and the [go2rtc](https://github.com/AlexxIT/go2rtc) live view.
 
 ```bash
-sudo mkdir -p /etc/dahua-onvif /etc/containers/systemd
-sudo cp config.yaml /etc/dahua-onvif/config.yaml          # edit dahua.host / onvif.name
-sudo cp podman/dahua-onvif.container /etc/containers/systemd/
-printf '%s' 'VTO-PASSWORD' | sudo podman secret create dahua-password -
-sudo systemctl daemon-reload
-sudo systemctl start dahua-onvif
-sudo systemctl enable --now podman-auto-update.timer      # optional: daily image updates
+curl -fsSL https://raw.githubusercontent.com/jwklijnsma/dahua-onvif/main/podman/install.sh \
+  | sudo sh -s -- --vto 10.0.2.45 --name Voordeur
 ```
 
-**Rootless** (user service):
+It asks for the VTO password (or pass `--password` / set `DAHUA_PASSWORD`), then:
 
-```bash
-mkdir -p ~/.config/dahua-onvif ~/.config/containers/systemd
-cp config.yaml ~/.config/dahua-onvif/config.yaml
-cp podman/dahua-onvif.container ~/.config/containers/systemd/
-printf '%s' 'VTO-PASSWORD' | podman secret create dahua-password -
-systemctl --user daemon-reload
-systemctl --user start dahua-onvif
-loginctl enable-linger "$USER"                            # start at boot without login
-systemctl --user enable --now podman-auto-update.timer    # optional
-```
+- writes `/etc/dahua-onvif/config.yaml` and `/etc/dahua-onvif/go2rtc.yaml` (kept on re-run unless `--force`)
+- stores the password in the podman secret `dahua-password`, shared by both containers
+- installs `dahua-onvif.container` and `go2rtc.container` in `/etc/containers/systemd/`, reloads systemd and starts them
 
-Quadlet units are generated, so `systemctl enable` is not used; the `[Install]` section takes care of boot start. Logs: `journalctl -u dahua-onvif -f` (add `--user` for rootless).
+Open `http://<host>/` for the status page with **live video**, and add `<host>` port `80` as an ONVIF camera in your NVR. Re-run the installer any time to update the unit files or change the password. Other options: `--port`, `--user`, `--vto-port`, `--no-go2rtc`; see `install.sh --help`. Needs Podman 4.4 or newer.
 
-The container runs with host networking (needed for WS-Discovery), a read-only root filesystem, `no-new-privileges` and only `NET_BIND_SERVICE` (to listen on port 80). Make sure nothing else on the host uses port 80, or set another `onvif.port`. Rootless podman cannot bind ports below 1024 by default: use `onvif.port: 8000` there, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`. On a firewalld host, open the ports:
+Daily image updates: `systemctl enable --now podman-auto-update.timer`. Logs: `journalctl -u dahua-onvif -f` / `journalctl -u go2rtc -f`. Quadlet units are generated, so there is no `systemctl enable`; the `[Install]` section handles start at boot.
+
+### Live view (go2rtc)
+
+go2rtc takes the VTO's RTSP stream and passes it to the browser as WebRTC (MSE as fallback) without re-encoding, so latency stays under a second and CPU use is near zero. The status page uses it automatically when go2rtc answers on `http://<host>:1984` (`live.go2rtc_url: auto`) and falls back to a refreshing snapshot otherwise. go2rtc's own UI on port 1984 has no login, so keep it on your LAN.
+
+The VTO only accepts a few RTSP clients at a time. To have the NVR use go2rtc's single connection instead, set `stream.main_url` / `sub_url` in `config.yaml` to `rtsp://<host>:8554/voordeur` / `voordeur_sub`.
+
+### Security and ports
+
+Both containers use host networking (needed for WS-Discovery multicast and WebRTC). The bridge runs with a read-only root filesystem, `no-new-privileges` and every capability dropped except `NET_BIND_SERVICE`, so it can listen on port 80. It runs as container root so that capability works on every host, including LXC.
+
+Ports: 80/tcp (ONVIF + status page), 3702/udp (discovery), 1984/tcp (go2rtc web), 8554/tcp (RTSP restream), 8555/tcp+udp (WebRTC). With firewalld:
 
 ```bash
 sudo firewall-cmd --permanent --add-port=80/tcp --add-port=3702/udp --add-port=1984/tcp --add-port=8554/tcp --add-port=8555/tcp --add-port=8555/udp && sudo firewall-cmd --reload
 ```
 
-For an ONVIF login, create an `onvif-password` secret, set `onvif.username` in the config and uncomment the second `Secret=` line.
+For an ONVIF login, create an `onvif-password` podman secret, set `onvif.username` in the config and uncomment the second `Secret=` line in the unit.
 
-## Live view in the browser (go2rtc)
+### Manual / rootless install
 
-The status page shows a snapshot by default. For real-time video, run [go2rtc](https://github.com/AlexxIT/go2rtc) next to the bridge: it takes the VTO's RTSP stream and passes it to the browser as WebRTC (MSE as fallback) without re-encoding, so latency stays under a second and CPU use is near zero.
-
-```bash
-sudo cp podman/go2rtc.yaml /etc/dahua-onvif/go2rtc.yaml          # set the VTO IP in it
-sudo cp podman/go2rtc.container /etc/containers/systemd/
-sudo systemctl daemon-reload && sudo systemctl start go2rtc
-```
-
-It reuses the `dahua-password` secret. With `live.go2rtc_url: auto` in `config.yaml` (the default), the status page at `http://<host>/` embeds the live player from `http://<host>:1984`. go2rtc's own UI on port 1984 has no login, so keep it on your LAN. Ports: 1984/tcp (web), 8554/tcp (RTSP restream), 8555/tcp+udp (WebRTC).
-
-The VTO only accepts a few RTSP clients at a time. To have the NVR use go2rtc's single connection instead, set `stream.main_url` / `sub_url` to `rtsp://<host>:8554/voordeur` / `voordeur_sub`.
-
+Copy `podman/*.container` to `~/.config/containers/systemd/`, create `~/.config/dahua-onvif/config.yaml` and `go2rtc.yaml` from the examples in this repo, run `podman secret create dahua-password -`, then `systemctl --user daemon-reload && systemctl --user start dahua-onvif go2rtc` and `loginctl enable-linger "$USER"`. Rootless podman cannot bind ports below 1024 by default: set `onvif.port: 8000`, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`.
 
 ## Image tags
 
