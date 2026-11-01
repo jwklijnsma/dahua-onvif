@@ -395,6 +395,7 @@ class Onvif:
         app.router.add_post("/onvif/media_service", self.soap("media"))
         app.router.add_post("/onvif/events_service", self.soap("events"))
         app.router.add_post("/onvif/events/sub/{sub}", self.soap("sub"))
+        app.router.add_get("/", self.http_index)
         app.router.add_get("/snapshot/{token}.jpg", self.http_snapshot)
         app.router.add_get("/healthz", lambda r: web.json_response(
             {"ok": True, "state": self.bus.state, "subscriptions": len(self.bus.subs)}))
@@ -456,6 +457,49 @@ class Onvif:
             expect = base64.b64encode(hashlib.sha1(raw).digest()).decode()
             return hmac.compare_digest(expect, given)
         return hmac.compare_digest(given, password)
+
+    async def http_index(self, request):
+        i, s = self.info, self.bus.state
+        def badge(on):
+            return '<b style="color:#c0392b">ON</b>' if on else '<span style="color:#888">off</span>'
+        rows = "".join(
+            f"<tr><td>{t}</td><td>{p['width']}x{p['height']} @ {p['fps']} fps</td>"
+            f"<td><code>{escape(re.sub(r'//[^@/]*@', '//***@', self.stream_uri(p)))}</code></td></tr>"
+            for t, p in self.profiles.items())
+        page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{escape(self.name)} - dahua-onvif</title>
+<style>
+ body{{font-family:system-ui,sans-serif;max-width:860px;margin:24px auto;padding:0 16px;color:#222;background:#fafafa}}
+ img{{width:100%;border-radius:8px;background:#000}} table{{border-collapse:collapse;width:100%}}
+ td{{padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top}} code{{font-size:12px;word-break:break-all}}
+ h1{{font-size:22px;margin-bottom:4px}} .sub{{color:#666;margin-top:0}}
+ @media (prefers-color-scheme:dark){{body{{background:#161616;color:#ddd}} td{{border-color:#333}} .sub{{color:#999}}}}
+</style></head><body>
+<h1>{escape(self.name)}</h1>
+<p class="sub">{escape(i['model'])} &middot; serial {escape(i['serial'] or '?')} &middot; firmware {escape(i['firmware'] or '?')}</p>
+<img id="snap" src="/snapshot/MainStream.jpg" alt="snapshot">
+<p>Motion: <span id="motion">{badge(s['motion'])}</span> &nbsp; Doorbell: <span id="ring">{badge(s['ring'])}</span>
+ &nbsp; <small>(snapshot and state refresh every 2s)</small></p>
+<table>
+<tr><td>ONVIF device service</td><td colspan="2"><code>{self.base}/onvif/device_service</code></td></tr>
+<tr><td>Add in NVR</td><td colspan="2">host <code>{self.ip}</code>, port <code>{self.port}</code></td></tr>
+{rows}
+<tr><td>Event subscriptions</td><td colspan="2" id="subs">{len(self.bus.subs)}</td></tr>
+</table>
+<script>
+const badge = on => on ? '<b style="color:#c0392b">ON</b>' : '<span style="color:#888">off</span>';
+setInterval(async () => {{
+  document.getElementById('snap').src = '/snapshot/MainStream.jpg?t=' + Date.now();
+  try {{
+    const h = await (await fetch('/healthz')).json();
+    document.getElementById('motion').innerHTML = badge(h.state.motion);
+    document.getElementById('ring').innerHTML = badge(h.state.ring);
+    document.getElementById('subs').textContent = h.subscriptions;
+  }} catch (e) {{}}
+}}, 2000);
+</script></body></html>"""
+        return web.Response(text=page, content_type="text/html")
 
     async def http_snapshot(self, request):
         try:
