@@ -82,13 +82,18 @@ jobs:
           cat streams.json
           grep -q '"voordeur"' streams.json
           grep -q '"voordeur_sub"' streams.json
+          # password 'p@ss w' must not break the RTSP URL (host must parse as 127.0.0.1)
+          grep -q '@127.0.0.1:554/cam' streams.json
+          ! grep -q 'ss w@' streams.json
+          sudo podman exec go2rtc printenv DAHUA_PASSWORD | grep -qx '%70%40%73%73%20%77'
           curl -sf "http://127.0.0.1:1984/stream.html?src=voordeur&mode=webrtc,mse" | grep -qi "video-stream"
           cd test && ONVIF_PORT=80 timeout 90 python test_client.py
 
       - name: Re-run installer keeps config and restarts cleanly
         run: |
-          sudo ./podman/install.sh --image localhost/dahua-onvif:ci | tee reinstall.log
+          sudo ./podman/install.sh --image localhost/dahua-onvif:ci < /dev/null | tee reinstall.log
           grep -q "keeping existing /etc/dahua-onvif/config.yaml" reinstall.log
+          sudo podman exec dahua-onvif printenv DAHUA_PASSWORD | grep -qx 'p@ss w'
           systemctl is-active dahua-onvif go2rtc
 
       - name: Show logs on failure

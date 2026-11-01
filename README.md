@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/jwklijnsma/dahua-onvif/main/podman/
 It asks for the VTO password (or pass `--password` / set `DAHUA_PASSWORD`), then:
 
 - writes `/etc/dahua-onvif/config.yaml` and `/etc/dahua-onvif/go2rtc.yaml` (kept on re-run unless `--force`)
-- stores the password in the podman secret `dahua-password`, shared by both containers
+- stores the password in the podman secrets `dahua-password` (bridge) and `dahua-password-url` (percent-encoded, for go2rtc's RTSP URL)
 - installs `dahua-onvif.container` and `go2rtc.container` in `/etc/containers/systemd/`, reloads systemd and starts them
 
 Open `http://<host>/` for the status page with **live video**, and add `<host>` port `80` as an ONVIF camera in your NVR. Re-run the installer any time to update the unit files or change the password. Other options: `--port`, `--user`, `--vto-port`, `--no-go2rtc`; see `install.sh --help`. Needs Podman 4.4 or newer.
@@ -86,7 +86,7 @@ For an ONVIF login, create an `onvif-password` podman secret, set `onvif.usernam
 
 ### Manual / rootless install
 
-Copy `podman/*.container` to `~/.config/containers/systemd/`, create `~/.config/dahua-onvif/config.yaml` and `go2rtc.yaml` from the examples in this repo, run `podman secret create dahua-password -`, then `systemctl --user daemon-reload && systemctl --user start dahua-onvif go2rtc` and `loginctl enable-linger "$USER"`. Rootless podman cannot bind ports below 1024 by default: set `onvif.port: 8000`, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`.
+Copy `podman/*.container` to `~/.config/containers/systemd/`, create `~/.config/dahua-onvif/config.yaml` and `go2rtc.yaml` from the examples in this repo, create the secrets `dahua-password` (plain) and `dahua-password-url` (percent-encoded, e.g. `@` → `%40`) with `podman secret create`, then `systemctl --user daemon-reload && systemctl --user start dahua-onvif go2rtc` and `loginctl enable-linger "$USER"`. Rootless podman cannot bind ports below 1024 by default: set `onvif.port: 8000`, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`.
 
 ## Image tags
 

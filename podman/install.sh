@@ -132,25 +132,33 @@ EOF
 write_config "$CONF/config.yaml" gen_config
 [ "$GO2RTC" -eq 1 ] && write_config "$CONF/go2rtc.yaml" gen_go2rtc
 
-# VTO password -> podman secret (shared by both containers)
-if [ -n "$PASSWORD" ]; then
+# VTO password -> podman secrets:
+#   dahua-password      plain, for dahua-onvif
+#   dahua-password-url  percent-encoded, for go2rtc's rtsp://user:pass@host URL
+urlencode() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
+set_secret() {  # name, value
+  podman secret exists "$1" 2>/dev/null && podman secret rm "$1" >/dev/null
+  printf '%s' "$2" | podman secret create "$1" - >/dev/null
+}
+ask_password() {
+  [ -r /dev/tty ] || { echo "no VTO password: pass --password or set DAHUA_PASSWORD" >&2; exit 2; }
+  printf 'VTO password for %s: ' "$VTO_USER" > /dev/tty
+  stty -echo < /dev/tty 2>/dev/null || true
+  read -r PASSWORD < /dev/tty
+  stty echo < /dev/tty 2>/dev/null || true
+  echo > /dev/tty
+}
+
+if [ -z "$PASSWORD" ]; then
   if podman secret exists dahua-password 2>/dev/null; then
-    podman secret rm dahua-password >/dev/null
+    # reuse the stored password (needs podman 4.8+ for --showsecret)
+    PASSWORD="$(podman secret inspect --showsecret --format '{{.SecretData}}' dahua-password 2>/dev/null || true)"
   fi
-  printf '%s' "$PASSWORD" | podman secret create dahua-password - >/dev/null
-  echo "stored VTO password in podman secret dahua-password"
-elif ! podman secret exists dahua-password 2>/dev/null; then
-  if [ -r /dev/tty ]; then
-    printf 'VTO password for %s: ' "$VTO_USER" > /dev/tty
-    stty -echo < /dev/tty 2>/dev/null || true
-    read -r PASSWORD < /dev/tty
-    stty echo < /dev/tty 2>/dev/null || true
-    echo > /dev/tty
-    printf '%s' "$PASSWORD" | podman secret create dahua-password - >/dev/null
-  else
-    echo "no VTO password: pass --password or set DAHUA_PASSWORD" >&2; exit 2
-  fi
+  [ -n "$PASSWORD" ] || ask_password
 fi
+set_secret dahua-password "$PASSWORD"
+set_secret dahua-password-url "$(urlencode "$PASSWORD")"
+echo "stored VTO password in podman secrets dahua-password and dahua-password-url"
 
 fetch dahua-onvif.container "$UNITS/dahua-onvif.container"
 if [ -n "$IMAGE" ]; then

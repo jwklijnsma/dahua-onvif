@@ -1,9 +1,8 @@
 # go2rtc config for the VTO live stream
 # Rootful: /etc/dahua-onvif/go2rtc.yaml   Rootless: ~/.config/dahua-onvif/go2rtc.yaml
 #
-# ${DAHUA_PASSWORD} comes from the same podman secret as the bridge.
-# Replace 10.0.2.45 with your VTO's IP. If the password contains @ : / ? # %,
-# URL-encode it in the secret (e.g. @ -> %40).
+# ${DAHUA_PASSWORD} comes from the podman secret dahua-password-url: the VTO
+# password percent-encoded (install.sh creates it). Replace 10.0.2.45 with your VTO's IP.
 
 streams:
   voordeur:
