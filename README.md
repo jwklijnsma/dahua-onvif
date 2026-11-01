@@ -46,6 +46,45 @@ docker run -d --name dahua-onvif --network host --restart unless-stopped \
 
 Without Docker: `pip install -r requirements.txt && python dahua_onvif.py config.yaml`
 
+## Podman + systemd (Quadlet)
+
+[`podman/dahua-onvif.container`](podman/dahua-onvif.container) is a Quadlet unit: systemd runs the container directly, restarts it on failure, starts it at boot, and `podman auto-update` keeps the image current. Needs Podman 4.4 or newer.
+
+**Rootful** (system service):
+
+```bash
+sudo mkdir -p /etc/dahua-onvif /etc/containers/systemd
+sudo cp config.yaml /etc/dahua-onvif/config.yaml          # edit dahua.host / onvif.name
+sudo cp podman/dahua-onvif.container /etc/containers/systemd/
+printf '%s' 'VTO-PASSWORD' | sudo podman secret create dahua-password -
+sudo systemctl daemon-reload
+sudo systemctl start dahua-onvif
+sudo systemctl enable --now podman-auto-update.timer      # optional: daily image updates
+```
+
+**Rootless** (user service):
+
+```bash
+mkdir -p ~/.config/dahua-onvif ~/.config/containers/systemd
+cp config.yaml ~/.config/dahua-onvif/config.yaml
+cp podman/dahua-onvif.container ~/.config/containers/systemd/
+printf '%s' 'VTO-PASSWORD' | podman secret create dahua-password -
+systemctl --user daemon-reload
+systemctl --user start dahua-onvif
+loginctl enable-linger "$USER"                            # start at boot without login
+systemctl --user enable --now podman-auto-update.timer    # optional
+```
+
+Quadlet units are generated, so `systemctl enable` is not used; the `[Install]` section takes care of boot start. Logs: `journalctl -u dahua-onvif -f` (add `--user` for rootless).
+
+The container runs with host networking (needed for WS-Discovery), a read-only root filesystem, no capabilities and `no-new-privileges`. On a firewalld host, open the ports:
+
+```bash
+sudo firewall-cmd --permanent --add-port=8000/tcp --add-port=3702/udp && sudo firewall-cmd --reload
+```
+
+For an ONVIF login, create an `onvif-password` secret, set `onvif.username` in the config and uncomment the second `Secret=` line.
+
 ## Image tags
 
 | Tag | When |

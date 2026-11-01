@@ -41,8 +41,48 @@ jobs:
           echo "--- mock"; cat mock.log || true
           echo "--- bridge"; cat bridge.log || true
 
-  build:
+  podman:
     needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r requirements.txt onvif-zeep
+
+      - name: Validate Quadlet unit
+        run: |
+          QUADLET_UNIT_DIRS=$PWD/podman /usr/libexec/podman/quadlet -dryrun
+          QUADLET_UNIT_DIRS=$PWD/podman /usr/libexec/podman/quadlet -dryrun -user
+
+      - name: Build image with podman
+        run: podman build -t localhost/dahua-onvif:ci .
+
+      - name: Run container with Quadlet flags against mock VTO
+        run: |
+          python test/mock_dahua.py > mock.log 2>&1 &
+          sleep 1
+          printf '%s' 'p@ss w' | podman secret create dahua-password -
+          podman run -d --name dahua-onvif --network=host \
+            --security-opt=no-new-privileges --cap-drop=all --read-only \
+            -v "$PWD/test/test_config.yaml:/config/config.yaml:ro,Z" \
+            --secret dahua-password,type=env,target=DAHUA_PASSWORD \
+            localhost/dahua-onvif:ci
+          sleep 5
+          cd test && timeout 90 python test_client.py
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "--- mock"; cat mock.log || true
+          echo "--- container"; podman logs dahua-onvif || true
+
+  build:
+    needs: [test, podman]
     runs-on: ubuntu-latest
     permissions:
       contents: read

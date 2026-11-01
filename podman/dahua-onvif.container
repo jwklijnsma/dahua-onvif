@@ -1,0 +1,39 @@
+# Podman Quadlet unit for dahua-onvif
+#
+# Rootful:  /etc/containers/systemd/dahua-onvif.container
+#           config in /etc/dahua-onvif/config.yaml
+# Rootless: ~/.config/containers/systemd/dahua-onvif.container
+#           config in ~/.config/dahua-onvif/config.yaml
+#           (run `loginctl enable-linger $USER` so it starts at boot)
+#
+# The VTO password comes from a podman secret:
+#   printf '%s' 'VTO-PASSWORD' | podman secret create dahua-password -
+
+[Unit]
+Description=Dahua VTO to ONVIF bridge
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=ghcr.io/jwklijnsma/dahua-onvif:latest
+ContainerName=dahua-onvif
+# Host networking is needed for WS-Discovery multicast (udp/3702)
+Network=host
+# %E = /etc (rootful) or ~/.config (rootless)
+Volume=%E/dahua-onvif/config.yaml:/config/config.yaml:ro,Z
+Secret=dahua-password,type=env,target=DAHUA_PASSWORD
+# Optional ONVIF login for the NVR - create the secret first, then uncomment:
+# Secret=onvif-password,type=env,target=ONVIF_PASSWORD
+# Pull new images with `podman auto-update` / podman-auto-update.timer
+AutoUpdate=registry
+NoNewPrivileges=true
+DropCapability=ALL
+ReadOnly=true
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
