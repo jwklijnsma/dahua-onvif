@@ -223,6 +223,17 @@ class Dahua:
                             self._dispatch(part, handler)
             except asyncio.CancelledError:
                 raise
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (401, 403):
+                    # Dahua locks the account after ~5 failed logins; don't hammer it
+                    log.error("event stream: VTO rejected login (%s) - check dahua.username "
+                              "and the dahua-password secret; retrying in 5 min",
+                              e.response.status_code)
+                    await asyncio.sleep(300)
+                    backoff = 2
+                    continue
+                log.warning("event stream error: HTTP %s - reconnecting in %ss",
+                            e.response.status_code, backoff)
             except Exception as e:  # noqa: BLE001
                 log.warning("event stream error: %s - reconnecting in %ss", e, backoff)
             await asyncio.sleep(backoff)
