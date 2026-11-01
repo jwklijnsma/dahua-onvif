@@ -1,0 +1,31 @@
+# dahua-onvif config for a Dahua VTO2111D-P
+
+dahua:
+  host: 192.168.1.50        # VTO IP address
+  port: 80                  # HTTP API (same as the Home Assistant integration)
+  rtsp_port: 554
+  username: admin
+  password: ""              # or set DAHUA_PASSWORD in the environment
+  channel: 1
+  events: true              # keep the event stream open (motion + doorbell button)
+
+onvif:
+  port: 8000                # ONVIF service port on this host
+  name: Voordeur            # name shown in the NVR
+  advertise_ip:             # leave empty to auto-detect the IP facing the VTO
+  username: ""              # set to require ONVIF login from the NVR (recommended)
+  password: ""              # or set ONVIF_PASSWORD
+  discovery: true           # WS-Discovery on udp/3702
+  # uuid / mac are derived from the VTO serial; override only if needed
+
+stream:
+  embed_credentials: true   # put VTO login in the RTSP URL handed to the NVR
+  # Optional: point the NVR at a restream (go2rtc / MediaMTX) instead of the VTO itself
+  # main_url: rtsp://192.168.1.10:8554/vto_main
+  # sub_url:  rtsp://192.168.1.10:8554/vto_sub
+
+doorbell:
+  hold_seconds: 3           # how long the doorbell input stays "true" after a press
+  extra_codes: []           # extra Dahua event codes to treat as a ring
+
+log_level: INFO             # DEBUG prints every Dahua event code - handy for tuning

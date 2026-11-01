@@ -1,0 +1,4 @@
+dahua: {host: 127.0.0.1, port: 8080, username: admin, password: "p@ss w"}
+onvif: {port: 8000, name: Voordeur, advertise_ip: 127.0.0.1, username: nvr, password: secret, discovery: true}
+doorbell: {hold_seconds: 3}
+log_level: DEBUG

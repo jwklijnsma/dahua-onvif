@@ -1,0 +1,12 @@
+services:
+  dahua-onvif:
+    image: ghcr.io/jwklijnsma/dahua-onvif:latest
+    # build: .                  # uncomment to build locally instead
+    container_name: dahua-onvif
+    network_mode: host          # needed for WS-Discovery multicast (udp/3702)
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    environment:
+      - DAHUA_PASSWORD=${DAHUA_PASSWORD}
+      - ONVIF_PASSWORD=${ONVIF_PASSWORD:-}

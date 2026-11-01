@@ -1,0 +1,7 @@
+.git
+.github
+test
+*.md
+compose.yaml
+config.yaml
+__pycache__
