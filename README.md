@@ -14,10 +14,11 @@ It reads the device the same way the [rroller/dahua](https://github.com/rroller/
 
 | Output (ONVIF) | |
 |---|---|
-| `http://<host>:8000/onvif/device_service` | Device + Media (Profile S), 2 profiles |
+| `http://<host>/onvif/device_service` | Device + Media (Profile S), 2 profiles |
 | PullPoint events | `tns1:VideoSource/MotionAlarm`, `tns1:RuleEngine/CellMotionDetector/Motion`, `tns1:Device/Trigger/DigitalInput` (InputToken `DoorBell`) |
 | WS-Discovery `udp/3702` | auto-discovery by the NVR |
-| `http://<host>:8000/healthz` | status + current event state |
+| `http://<host>/` | status page: live snapshot, motion/doorbell state, stream info |
+| `http://<host>/healthz` | status + current event state (JSON) |
 
 ## Run
 
@@ -77,10 +78,10 @@ systemctl --user enable --now podman-auto-update.timer    # optional
 
 Quadlet units are generated, so `systemctl enable` is not used; the `[Install]` section takes care of boot start. Logs: `journalctl -u dahua-onvif -f` (add `--user` for rootless).
 
-The container runs with host networking (needed for WS-Discovery), a read-only root filesystem, no capabilities and `no-new-privileges`. On a firewalld host, open the ports:
+The container runs with host networking (needed for WS-Discovery), a read-only root filesystem, `no-new-privileges` and only `NET_BIND_SERVICE` (to listen on port 80). Make sure nothing else on the host uses port 80, or set another `onvif.port`. Rootless podman cannot bind ports below 1024 by default: use `onvif.port: 8000` there, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`. On a firewalld host, open the ports:
 
 ```bash
-sudo firewall-cmd --permanent --add-port=8000/tcp --add-port=3702/udp && sudo firewall-cmd --reload
+sudo firewall-cmd --permanent --add-port=80/tcp --add-port=3702/udp && sudo firewall-cmd --reload
 ```
 
 For an ONVIF login, create an `onvif-password` secret, set `onvif.username` in the config and uncomment the second `Secret=` line.

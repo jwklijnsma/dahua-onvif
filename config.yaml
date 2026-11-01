@@ -10,7 +10,7 @@ dahua:
   events: true              # keep the event stream open (motion + doorbell button)
 
 onvif:
-  port: 8000                # ONVIF service port on this host
+  port: 80                  # ONVIF/web port on this host (<1024 needs NET_BIND_SERVICE, set in the Quadlet unit)
   name: Voordeur            # name shown in the NVR
   advertise_ip:             # leave empty to auto-detect the IP facing the VTO
   username: ""              # set to require ONVIF login from the NVR (recommended)

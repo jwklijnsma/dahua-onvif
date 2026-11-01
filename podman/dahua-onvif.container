@@ -28,6 +28,8 @@ Secret=dahua-password,type=env,target=DAHUA_PASSWORD
 AutoUpdate=registry
 NoNewPrivileges=true
 DropCapability=ALL
+# Allows binding onvif.port 80 (any port below 1024)
+AddCapability=NET_BIND_SERVICE
 ReadOnly=true
 
 [Service]

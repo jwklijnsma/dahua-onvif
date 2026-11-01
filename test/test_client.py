@@ -1,9 +1,10 @@
 """End-to-end check of dahua-onvif with the onvif-zeep client (python-onvif)."""
-import socket, time, urllib.request, uuid
+import os, socket, time, urllib.request, uuid
+PORT = int(os.environ.get("ONVIF_PORT", 8000))
 from onvif import ONVIFCamera
 from zeep.exceptions import Fault
 
-cam = ONVIFCamera("127.0.0.1", 8000, "nvr", "secret")
+cam = ONVIFCamera("127.0.0.1", PORT, "nvr", "secret")
 info = cam.devicemgmt.GetDeviceInformation()
 print("device:", info.Manufacturer, info.Model, info.SerialNumber, info.FirmwareVersion)
 print("iface MAC:", cam.devicemgmt.GetNetworkInterfaces()[0].Info.HwAddress)
@@ -39,7 +40,7 @@ assert any(t == "State" and v == "true" and o == "Changed" for t, v, o in seen),
 print("events OK")
 
 try:
-    ONVIFCamera("127.0.0.1", 8000, "nvr", "wrong").devicemgmt.GetDeviceInformation()
+    ONVIFCamera("127.0.0.1", PORT, "nvr", "wrong").devicemgmt.GetDeviceInformation()
     print("AUTH NOT ENFORCED")
 except Exception as f:
     print("wrong password rejected:", f)
