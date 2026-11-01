@@ -20,9 +20,17 @@ onvif:
 
 stream:
   embed_credentials: true   # put VTO login in the RTSP URL handed to the NVR
-  # Optional: point the NVR at a restream (go2rtc / MediaMTX) instead of the VTO itself
-  # main_url: rtsp://192.168.1.10:8554/vto_main
-  # sub_url:  rtsp://192.168.1.10:8554/vto_sub
+  # Optional: point the NVR at the go2rtc restream instead of the VTO itself
+  # (the VTO only allows a few RTSP clients; go2rtc keeps one connection open)
+  # main_url: rtsp://<podman-host-ip>:8554/voordeur
+  # sub_url:  rtsp://<podman-host-ip>:8554/voordeur_sub
+
+live:
+  # Live video on the status page via go2rtc (see podman/go2rtc.container).
+  # "auto" = go2rtc on the same host as this page, port 1984. Or a full URL: http://10.0.2.10:1984
+  go2rtc_url: auto
+  stream: voordeur          # stream name in go2rtc.yaml
+  mode: webrtc,mse          # webrtc = lowest latency, mse = fallback
 
 doorbell:
   hold_seconds: 3           # how long the doorbell input stays "true" after a press

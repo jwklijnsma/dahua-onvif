@@ -1,0 +1,28 @@
+# Podman Quadlet unit for go2rtc: live WebRTC/MSE view of the VTO in the browser
+#
+# Rootful:  /etc/containers/systemd/go2rtc.container + /etc/dahua-onvif/go2rtc.yaml
+# Rootless: ~/.config/containers/systemd/go2rtc.container + ~/.config/dahua-onvif/go2rtc.yaml
+# Uses the same dahua-password podman secret as dahua-onvif.
+
+[Unit]
+Description=go2rtc live stream for the Dahua VTO
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/alexxit/go2rtc:latest
+ContainerName=go2rtc
+# Host networking: WebRTC needs direct UDP/TCP 8555 and the real host IP
+Network=host
+Volume=%E/dahua-onvif/go2rtc.yaml:/config/go2rtc.yaml:ro,Z
+Secret=dahua-password,type=env,target=DAHUA_PASSWORD
+AutoUpdate=registry
+NoNewPrivileges=true
+
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

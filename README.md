@@ -81,10 +81,25 @@ Quadlet units are generated, so `systemctl enable` is not used; the `[Install]` 
 The container runs with host networking (needed for WS-Discovery), a read-only root filesystem, `no-new-privileges` and only `NET_BIND_SERVICE` (to listen on port 80). Make sure nothing else on the host uses port 80, or set another `onvif.port`. Rootless podman cannot bind ports below 1024 by default: use `onvif.port: 8000` there, or allow it with `sysctl net.ipv4.ip_unprivileged_port_start=80`. On a firewalld host, open the ports:
 
 ```bash
-sudo firewall-cmd --permanent --add-port=80/tcp --add-port=3702/udp && sudo firewall-cmd --reload
+sudo firewall-cmd --permanent --add-port=80/tcp --add-port=3702/udp --add-port=1984/tcp --add-port=8554/tcp --add-port=8555/tcp --add-port=8555/udp && sudo firewall-cmd --reload
 ```
 
 For an ONVIF login, create an `onvif-password` secret, set `onvif.username` in the config and uncomment the second `Secret=` line.
+
+## Live view in the browser (go2rtc)
+
+The status page shows a snapshot by default. For real-time video, run [go2rtc](https://github.com/AlexxIT/go2rtc) next to the bridge: it takes the VTO's RTSP stream and passes it to the browser as WebRTC (MSE as fallback) without re-encoding, so latency stays under a second and CPU use is near zero.
+
+```bash
+sudo cp podman/go2rtc.yaml /etc/dahua-onvif/go2rtc.yaml          # set the VTO IP in it
+sudo cp podman/go2rtc.container /etc/containers/systemd/
+sudo systemctl daemon-reload && sudo systemctl start go2rtc
+```
+
+It reuses the `dahua-password` secret. With `live.go2rtc_url: auto` in `config.yaml` (the default), the status page at `http://<host>/` embeds the live player from `http://<host>:1984`. go2rtc's own UI on port 1984 has no login, so keep it on your LAN. Ports: 1984/tcp (web), 8554/tcp (RTSP restream), 8555/tcp+udp (WebRTC).
+
+The VTO only accepts a few RTSP clients at a time. To have the NVR use go2rtc's single connection instead, set `stream.main_url` / `sub_url` to `rtsp://<host>:8554/voordeur` / `voordeur_sub`.
+
 
 ## Image tags
 

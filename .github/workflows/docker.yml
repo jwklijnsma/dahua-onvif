@@ -78,11 +78,26 @@ jobs:
           curl -sf http://127.0.0.1/ | grep -q "ONVIF device service"
           cd test && ONVIF_PORT=80 timeout 90 python test_client.py
 
+      - name: Run go2rtc with the Quadlet flags and shipped config
+        run: |
+          sudo mkdir -p /etc/dahua-onvif
+          sudo cp podman/go2rtc.yaml /etc/dahua-onvif/go2rtc.yaml
+          sudo podman run -d --name go2rtc --network=host --security-opt=no-new-privileges \
+            -v /etc/dahua-onvif/go2rtc.yaml:/config/go2rtc.yaml:ro,Z \
+            --secret dahua-password,type=env,target=DAHUA_PASSWORD \
+            docker.io/alexxit/go2rtc:latest
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:1984/api/streams > streams.json && break; sleep 1; done
+          cat streams.json
+          grep -q '"voordeur"' streams.json
+          grep -q '"voordeur_sub"' streams.json
+          curl -sf "http://127.0.0.1:1984/stream.html?src=voordeur&mode=webrtc,mse" | grep -qi "video-stream"
+
       - name: Show logs on failure
         if: failure()
         run: |
           echo "--- mock"; cat mock.log || true
           echo "--- container"; sudo podman logs dahua-onvif || true
+          echo "--- go2rtc"; sudo podman logs go2rtc || true
 
   build:
     needs: [test, podman]

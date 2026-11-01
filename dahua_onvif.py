@@ -47,6 +47,7 @@ DEFAULTS = {
               "advertise_ip": None, "username": "", "password": "", "discovery": True},
     "stream": {"embed_credentials": True, "main_url": None, "sub_url": None},
     "doorbell": {"hold_seconds": 3, "extra_codes": []},
+    "live": {"go2rtc_url": None, "stream": "voordeur", "mode": "webrtc,mse"},
     "log_level": "INFO",
 }
 
@@ -458,6 +459,26 @@ class Onvif:
             return hmac.compare_digest(expect, given)
         return hmac.compare_digest(given, password)
 
+    def live_html(self) -> str:
+        """Live player (go2rtc WebRTC/MSE) when configured, otherwise the refreshing snapshot."""
+        live = self.cfg["live"]
+        if not live.get("go2rtc_url"):
+            return '<img id="snap" src="/snapshot/MainStream.jpg" alt="snapshot">'
+        base = str(live["go2rtc_url"]).rstrip("/")
+        q = f"src={quote(str(live['stream']))}&mode={quote(str(live['mode']), safe=',')}"
+        if base.startswith("auto"):
+            # "auto" / "auto:1984": go2rtc on the same host the browser used for this page
+            port = re.sub(r"\D", "", base.partition(":")[2]) or "1984"
+            src = f'" + location.protocol + "//" + location.hostname + ":{port}/stream.html?{q}"'
+            set_src = f'<script>document.getElementById("live").src = "{src};</script>'
+            attr = ""
+        else:
+            set_src, attr = "", f' src="{escape(base)}/stream.html?{escape(q)}"'
+        return ('<iframe id="live" allow="autoplay; fullscreen" allowfullscreen '
+                'style="width:100%;aspect-ratio:16/9;border:0;border-radius:8px;background:#000"'
+                f"{attr}></iframe>{set_src}"
+                '<p><small>Live via go2rtc &middot; <a href="/snapshot/MainStream.jpg">snapshot</a></small></p>')
+
     async def http_index(self, request):
         i, s = self.info, self.bus.state
         def badge(on):
@@ -478,7 +499,7 @@ class Onvif:
 </style></head><body>
 <h1>{escape(self.name)}</h1>
 <p class="sub">{escape(i['model'])} &middot; serial {escape(i['serial'] or '?')} &middot; firmware {escape(i['firmware'] or '?')}</p>
-<img id="snap" src="/snapshot/MainStream.jpg" alt="snapshot">
+{self.live_html()}
 <p>Motion: <span id="motion">{badge(s['motion'])}</span> &nbsp; Doorbell: <span id="ring">{badge(s['ring'])}</span>
  &nbsp; <small>(snapshot and state refresh every 2s)</small></p>
 <table>
@@ -490,7 +511,8 @@ class Onvif:
 <script>
 const badge = on => on ? '<b style="color:#c0392b">ON</b>' : '<span style="color:#888">off</span>';
 setInterval(async () => {{
-  document.getElementById('snap').src = '/snapshot/MainStream.jpg?t=' + Date.now();
+  const snap = document.getElementById('snap');
+  if (snap) snap.src = '/snapshot/MainStream.jpg?t=' + Date.now();
   try {{
     const h = await (await fetch('/healthz')).json();
     document.getElementById('motion').innerHTML = badge(h.state.motion);

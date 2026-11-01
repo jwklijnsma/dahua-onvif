@@ -1,0 +1,21 @@
+# go2rtc config for the VTO live stream
+# Rootful: /etc/dahua-onvif/go2rtc.yaml   Rootless: ~/.config/dahua-onvif/go2rtc.yaml
+#
+# ${DAHUA_PASSWORD} comes from the same podman secret as the bridge.
+# Replace 10.0.2.45 with your VTO's IP. If the password contains @ : / ? # %,
+# URL-encode it in the secret (e.g. @ -> %40).
+
+streams:
+  voordeur:
+    - rtsp://admin:${DAHUA_PASSWORD}@10.0.2.45:554/cam/realmonitor?channel=1&subtype=0
+  voordeur_sub:
+    - rtsp://admin:${DAHUA_PASSWORD}@10.0.2.45:554/cam/realmonitor?channel=1&subtype=1
+
+api:
+  listen: ":1984"        # web UI + player: http://<host>:1984/  (no login - keep it on your LAN)
+
+rtsp:
+  listen: ":8554"        # restream: rtsp://<host>:8554/voordeur
+
+webrtc:
+  listen: ":8555"        # WebRTC media, tcp + udp
