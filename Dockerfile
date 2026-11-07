@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.15-slim
 LABEL org.opencontainers.image.source="https://github.com/jwklijnsma/dahua-onvif" \
       org.opencontainers.image.description="Dahua VTO doorbell as a virtual ONVIF camera"
 ENV PYTHONUNBUFFERED=1
